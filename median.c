@@ -2,9 +2,9 @@
 #include <fmgr.h>
 #include <lib/rbtree.h>
 #include <catalog/pg_type.h>
+#include <common/int128.h>
 #include <utils/typcache.h>
 #include <utils/lsyscache.h>
-#include <fmgr.h>
 
 #ifdef PG_MODULE_MAGIC
 PG_MODULE_MAGIC;
@@ -202,6 +202,53 @@ median_transfn(PG_FUNCTION_ARGS)
 	PG_RETURN_POINTER(state);
 }
 
+/*********/
+/*********/
+/*********/
+
+static inline int64
+avg_i64(int64 first, int64 second)
+{
+	int128 sum = int64_to_int128(first);
+	int128_add_int64(&sum, second);
+	if (int128_compare(sum, int64_to_int128(INT64_MAX)) == 1)
+		return INT64_MAX;
+	
+	return int128_to_int64(sum) / 2ll;
+}
+
+static inline Datum
+datum_avg(Oid element_type, Datum first, Datum second)
+{
+	Datum	result;
+	switch (element_type)
+	{	
+		case INT2OID:
+			result = Int16GetDatum((int16)avg_i64(DatumGetInt16(first), DatumGetInt16(second)));
+			break;
+		case INT4OID:
+			result = Int32GetDatum((int32)avg_i64(DatumGetInt32(first), DatumGetInt32(second)));
+			break;
+		case INT8OID:
+			result = Int64GetDatum(avg_i64(DatumGetInt64(first), DatumGetInt64(second)));
+			break;
+		case FLOAT4OID:
+			result = Float4GetDatum((DatumGetFloat4(first) + DatumGetFloat4(second)) / 2.0f);
+			break;
+		case FLOAT8OID:
+			result = Float8GetDatum((DatumGetFloat8(first) + DatumGetFloat8(second)) / 2.0);
+			break;
+		case NUMERICOID:
+			//TODO
+			result = first;
+		default:
+			result = first;
+	}
+	
+	return result;
+}
+
+
 PG_FUNCTION_INFO_V1(median_finalfn);
 
 /*
@@ -249,7 +296,7 @@ median_finalfn(PG_FUNCTION_ARGS)
 		 * median = (DatumGetInt32(median0_datum) +
 		 * DatumGetInt32(median1_res.data)) / 2;
 		 */
-		median = median0_datum;
+		median = datum_avg(element_type, median0_datum, median1_res.data);
 	}
 
 	else
