@@ -16,8 +16,6 @@ typedef struct HTree
 {
 	RBTree	   *tree;
 	uint64		num_elements;
-	/* TODO is it safe to store the node contianing the meidan */
-	/* HistNode	*median; */
 } HTree;
 
 typedef struct HistNode
@@ -42,11 +40,8 @@ hnode_compare(const RBNode *existing, const RBNode *newdata, void *arg)
 	TypeCacheEntry *tentry = (TypeCacheEntry *) arg;
 	PGFunction	cmp_fn = tentry->cmp_proc_finfo.fn_addr;
 
-	/* TODO correct collation? */
 	/* TODO cache? */
 	Oid			collation = get_typcollation(tentry->type_id);
-
-	/* tentry->rng_collation; */
 	Datum		cmp = DirectFunctionCall2Coll(cmp_fn, collation, e->data, n->data);
 
 	return DatumGetInt32(cmp);
