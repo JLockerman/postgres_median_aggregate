@@ -25,11 +25,6 @@ typedef struct HistNode
 	uint64		count;
 } HistNode;
 
-typedef union MedianResult
-{
-	char		nothing;
-	Datum		data;
-} MedianResult;
 
 /* HNodes are compared based on data */
 static inline int

@@ -71,6 +71,10 @@ SELECT median(color) FROM evenvals;
 SELECT * FROM evenvals ORDER BY magnitude;
 SELECT median(magnitude) FROM evenvals;
 
+-- SELECT * FROM evenvals ORDER BY (val, color, magnitude);
+-- TODO the following doesn't work, should it?
+-- SELECT median((val, color, magnitude)) FROM evenvals;
+
 --test all the same value
 CREATE TABLE samevals(val int);
 
