@@ -10,9 +10,6 @@
 PG_MODULE_MAGIC;
 #endif
 
-PG_FUNCTION_INFO_V1(median_transfn);
-
-
 /* RedBlack Tree specialization for use as a histogram */
 
 typedef struct HTree {
@@ -142,6 +139,7 @@ htree_median(HTree *hist, Datum *median0, MedianResult *median1)
 /*********/
 /*********/
 
+PG_FUNCTION_INFO_V1(median_transfn);
 
 /*
  * Median state transfer function.
