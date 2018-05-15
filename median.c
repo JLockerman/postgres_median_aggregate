@@ -209,25 +209,27 @@ median_transfn(PG_FUNCTION_ARGS)
 static inline int64
 avg_i64(int64 first, int64 second)
 {
-	int128 sum = int64_to_int128(first);
+	int128		sum = int64_to_int128(first);
+
 	int128_add_int64(&sum, second);
 	if (int128_compare(sum, int64_to_int128(INT64_MAX)) == 1)
 		return INT64_MAX;
-	
+
 	return int128_to_int64(sum) / 2ll;
 }
 
 static inline Datum
 datum_avg(Oid element_type, Datum first, Datum second)
 {
-	Datum	result;
+	Datum		result;
+
 	switch (element_type)
-	{	
+	{
 		case INT2OID:
-			result = Int16GetDatum((int16)avg_i64(DatumGetInt16(first), DatumGetInt16(second)));
+			result = Int16GetDatum((int16) avg_i64(DatumGetInt16(first), DatumGetInt16(second)));
 			break;
 		case INT4OID:
-			result = Int32GetDatum((int32)avg_i64(DatumGetInt32(first), DatumGetInt32(second)));
+			result = Int32GetDatum((int32) avg_i64(DatumGetInt32(first), DatumGetInt32(second)));
 			break;
 		case INT8OID:
 			result = Int64GetDatum(avg_i64(DatumGetInt64(first), DatumGetInt64(second)));
@@ -239,12 +241,12 @@ datum_avg(Oid element_type, Datum first, Datum second)
 			result = Float8GetDatum((DatumGetFloat8(first) + DatumGetFloat8(second)) / 2.0);
 			break;
 		case NUMERICOID:
-			//TODO
+			/* TODO */
 			result = first;
 		default:
 			result = first;
 	}
-	
+
 	return result;
 }
 
