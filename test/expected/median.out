@@ -100,3 +100,72 @@ SELECT median(val) FROM timestampvals;
  Thu Jan 01 13:53:20 1970 PST
 (1 row)
 
+--test even number of values requiring average
+CREATE TABLE evenvals(val int, color text, magnitude float);
+INSERT INTO evenvals VALUES
+       (10, 'a', 1.0),
+       (9, 'b', 5.0),
+       (8, 'c', 2.0),
+       (7, 'd', 7.0),
+       (5, 'e', 3.0),
+       (4, 'f', 4.0),
+       (3, 'g', 6.0),
+       (2, 'h', 8.0);
+--TODO what's the expected behavior for the next two?
+SELECT * FROM evenvals ORDER BY val;
+ val | color | magnitude 
+-----+-------+-----------
+   2 | h     |         8
+   3 | g     |         6
+   4 | f     |         4
+   5 | e     |         3
+   7 | d     |         7
+   8 | c     |         2
+   9 | b     |         5
+  10 | a     |         1
+(8 rows)
+
+SELECT median(val) FROM evenvals;
+ median 
+--------
+      6
+(1 row)
+
+SELECT * FROM evenvals ORDER BY color;
+ val | color | magnitude 
+-----+-------+-----------
+  10 | a     |         1
+   9 | b     |         5
+   8 | c     |         2
+   7 | d     |         7
+   5 | e     |         3
+   4 | f     |         4
+   3 | g     |         6
+   2 | h     |         8
+(8 rows)
+
+SELECT median(color) FROM evenvals;
+ median 
+--------
+ d
+(1 row)
+
+SELECT * FROM evenvals ORDER BY magnitude;
+ val | color | magnitude 
+-----+-------+-----------
+  10 | a     |         1
+   8 | c     |         2
+   5 | e     |         3
+   4 | f     |         4
+   9 | b     |         5
+   3 | g     |         6
+   7 | d     |         7
+   2 | h     |         8
+(8 rows)
+
+SELECT median(magnitude) FROM evenvals;
+ median 
+--------
+    4.5
+(1 row)
+

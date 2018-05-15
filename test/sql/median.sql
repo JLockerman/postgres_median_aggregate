@@ -49,3 +49,25 @@ SELECT TIMESTAMP 'epoch' + (i * INTERVAL '1 second')
 FROM generate_series(0, 100000) as T(i);
 
 SELECT median(val) FROM timestampvals;
+
+--test even number of values requiring average
+CREATE TABLE evenvals(val int, color text, magnitude float);
+INSERT INTO evenvals VALUES
+       (10, 'a', 1.0),
+       (9, 'b', 5.0),
+       (8, 'c', 2.0),
+       (7, 'd', 7.0),
+       (5, 'e', 3.0),
+       (4, 'f', 4.0),
+       (3, 'g', 6.0),
+       (2, 'h', 8.0);
+
+--TODO what's the expected behavior for the next two?
+SELECT * FROM evenvals ORDER BY val;
+SELECT median(val) FROM evenvals;
+
+SELECT * FROM evenvals ORDER BY color;
+SELECT median(color) FROM evenvals;
+
+SELECT * FROM evenvals ORDER BY magnitude;
+SELECT median(magnitude) FROM evenvals;
