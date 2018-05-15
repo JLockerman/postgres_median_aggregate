@@ -128,7 +128,7 @@ SELECT * FROM evenvals ORDER BY val;
 SELECT median(val) FROM evenvals;
  median 
 --------
-      6
+      5
 (1 row)
 
 SELECT * FROM evenvals ORDER BY color;
@@ -166,6 +166,6 @@ SELECT * FROM evenvals ORDER BY magnitude;
 SELECT median(magnitude) FROM evenvals;
  median 
 --------
-    4.5
+      4
 (1 row)
 

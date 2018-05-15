@@ -98,9 +98,16 @@ htree_insert(HTree *hist, Datum data)
 	return (HistNode *) rb_insert(hist->tree, (RBNode *) &new, &is_new);
 }
 
-static inline bool
-htree_median(HTree *hist, Datum *median0, MedianResult *median1)
+static inline uint64
+htree_num_elements(HTree *hist)
 {
+	return hist->num_elements;
+}
+
+static inline Datum
+htree_median(HTree *hist)
+{
+	Datum		median;
 	bool		has_two = (hist->num_elements % 2) == 0;
 	uint64		mid;
 	uint64		seen = 0;
@@ -121,31 +128,20 @@ htree_median(HTree *hist, Datum *median0, MedianResult *median1)
 	{
 		HistNode   *node = (HistNode *) rb_iterate(&iter);
 
-		if (seen + node->count >= mid)
-		{
-			/* TODO copy datum? */
-			*median0 = node->data;
-		}
+		if (node == NULL)
+			elog(ERROR, "Internal Error, invalid histogram");
+
+		/* TODO copy datum? */
+		median = node->data;
 		seen += node->count;
 	}
 
-	if (has_two)
-	{
-		if (seen >= mid + 1)
-		{
-			median1->data = *median0;
-		}
+	/*
+	 * post condition: (seen - node->count < mid) and (seen + node->count >=
+	 * mid) so node->data is the middle element
+	 */
 
-		else
-		{
-			HistNode   *node = (HistNode *) rb_iterate(&iter);
-
-			Assert(seen + node->count >= mid + 1);
-			median1->data = node->data;
-		}
-	}
-
-	return has_two;
+	return median;
 }
 
 
@@ -206,51 +202,6 @@ median_transfn(PG_FUNCTION_ARGS)
 /*********/
 /*********/
 
-static inline int64
-avg_i64(int64 first, int64 second)
-{
-	int128		sum = int64_to_int128(first);
-
-	int128_add_int64(&sum, second);
-	if (int128_compare(sum, int64_to_int128(INT64_MAX)) == 1)
-		return INT64_MAX;
-
-	return int128_to_int64(sum) / 2ll;
-}
-
-static inline Datum
-datum_avg(Oid element_type, Datum first, Datum second)
-{
-	Datum		result;
-
-	switch (element_type)
-	{
-		case INT2OID:
-			result = Int16GetDatum((int16) avg_i64(DatumGetInt16(first), DatumGetInt16(second)));
-			break;
-		case INT4OID:
-			result = Int32GetDatum((int32) avg_i64(DatumGetInt32(first), DatumGetInt32(second)));
-			break;
-		case INT8OID:
-			result = Int64GetDatum(avg_i64(DatumGetInt64(first), DatumGetInt64(second)));
-			break;
-		case FLOAT4OID:
-			result = Float4GetDatum((DatumGetFloat4(first) + DatumGetFloat4(second)) / 2.0f);
-			break;
-		case FLOAT8OID:
-			result = Float8GetDatum((DatumGetFloat8(first) + DatumGetFloat8(second)) / 2.0);
-			break;
-		case NUMERICOID:
-			/* TODO */
-			result = first;
-		default:
-			result = first;
-	}
-
-	return result;
-}
-
-
 PG_FUNCTION_INFO_V1(median_finalfn);
 
 /*
@@ -268,15 +219,8 @@ median_finalfn(PG_FUNCTION_ARGS)
 {
 	MemoryContext agg_context;
 	MemoryContext oldcontext;
-	Oid			element_type = get_fn_expr_rettype(fcinfo->flinfo);
 	HTree	   *hist;
 	Datum		median;
-	bool		has_two;
-	Datum		median0_datum = CharGetDatum(0);
-	MedianResult median1_res;
-
-	median1_res.nothing = 0;
-
 
 	if (!AggCheckCallContext(fcinfo, &agg_context))
 		elog(ERROR, "median_finalfn called in non-aggregate context");
@@ -291,20 +235,10 @@ median_finalfn(PG_FUNCTION_ARGS)
 	if (hist == NULL)
 		PG_RETURN_NULL();
 
-	has_two = htree_median(hist, &median0_datum, &median1_res);
-	if (has_two)
-	{
-		/*
-		 * median = (DatumGetInt32(median0_datum) +
-		 * DatumGetInt32(median1_res.data)) / 2;
-		 */
-		median = datum_avg(element_type, median0_datum, median1_res.data);
-	}
+	if (htree_num_elements(hist) == 0)
+		PG_RETURN_NULL();
 
-	else
-	{
-		median = median0_datum;
-	}
+	median = htree_median(hist);
 
 	MemoryContextSwitchTo(oldcontext);
 
