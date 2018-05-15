@@ -50,7 +50,7 @@ FROM generate_series(0, 100000) as T(i);
 
 SELECT median(val) FROM timestampvals;
 
---test even number of values requiring average
+--test even number of values
 CREATE TABLE evenvals(val int, color text, magnitude float);
 INSERT INTO evenvals VALUES
        (10, 'a', 1.0),
@@ -62,7 +62,6 @@ INSERT INTO evenvals VALUES
        (3, 'g', 6.0),
        (2, 'h', 8.0);
 
---TODO what's the expected behavior for the next two?
 SELECT * FROM evenvals ORDER BY val;
 SELECT median(val) FROM evenvals;
 
@@ -71,3 +70,22 @@ SELECT median(color) FROM evenvals;
 
 SELECT * FROM evenvals ORDER BY magnitude;
 SELECT median(magnitude) FROM evenvals;
+
+--test all the same value
+CREATE TABLE samevals(val int);
+
+INSERT INTO samevals VALUES
+       (72);
+
+SELECT * FROM samevals ORDER BY val;
+SELECT median(val) FROM evenvals;
+
+INSERT INTO samevals VALUES
+       (72);
+
+SELECT * FROM samevals ORDER BY val;
+SELECT median(val) FROM samevals;
+
+INSERT INTO samevals SELECT 72 FROM generate_series(1,100000);
+
+SELECT median(val) FROM samevals;
