@@ -114,12 +114,11 @@ static inline Datum
 htree_median(HTree *hist)
 {
 	Datum		median;
-	bool		has_two = (hist->num_elements % 2) == 0;
 	uint64		mid;
 	uint64		seen = 0;
 	RBTreeIterator iter;
 
-	if (has_two)
+	if ((hist->num_elements % 2) == 0)
 	{
 		mid = (hist->num_elements / 2);
 	}
