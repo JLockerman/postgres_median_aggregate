@@ -2,7 +2,7 @@
 #include <fmgr.h>
 #include <lib/rbtree.h>
 #include <catalog/pg_type.h>
-#include <common/int128.h>
+#include <utils/datum.h>
 #include <utils/typcache.h>
 #include <utils/lsyscache.h>
 
@@ -16,6 +16,8 @@ typedef struct HTree
 {
 	RBTree	   *tree;
 	uint64		num_elements;
+	int			typ_len;
+	bool		typ_by_val;
 } HTree;
 
 typedef struct HistNode
@@ -25,6 +27,11 @@ typedef struct HistNode
 	uint64		count;
 } HistNode;
 
+typedef struct HistMeta
+{
+	PGFunction	cmp_fn;
+	Oid			collation;
+} HistMeta;
 
 /* HNodes are compared based on data */
 static inline int
@@ -32,12 +39,8 @@ hnode_compare(const RBNode *existing, const RBNode *newdata, void *arg)
 {
 	HistNode   *e = (HistNode *) existing;
 	HistNode   *n = (HistNode *) newdata;
-	TypeCacheEntry *tentry = (TypeCacheEntry *) arg;
-	PGFunction	cmp_fn = tentry->cmp_proc_finfo.fn_addr;
-
-	/* TODO cache? */
-	Oid			collation = get_typcollation(tentry->type_id);
-	Datum		cmp = DirectFunctionCall2Coll(cmp_fn, collation, e->data, n->data);
+	HistMeta   *meta = (HistMeta *) arg;
+	Datum		cmp = DirectFunctionCall2Coll(meta->cmp_fn, meta->collation, e->data, n->data);
 
 	return DatumGetInt32(cmp);
 }
@@ -64,9 +67,16 @@ static inline HTree *
 htree_create(TypeCacheEntry *tentry)
 {
 	HTree	   *h_tree = palloc(sizeof(HTree));
+	HistMeta   *h_meta = palloc(sizeof(HistMeta));
 
 	h_tree->num_elements = 0;
-	RBTree	   *rb_tree = rb_create(sizeof(HistNode), hnode_compare, hnode_combine, hnode_alloc, NULL, tentry);
+	h_tree->typ_len = tentry->typlen;
+	h_tree->typ_by_val = tentry->typbyval;
+
+	h_meta->cmp_fn = tentry->cmp_proc_finfo.fn_addr;
+	h_meta->collation = get_typcollation(tentry->type_id);
+
+	RBTree	   *rb_tree = rb_create(sizeof(HistNode), hnode_compare, hnode_combine, hnode_alloc, NULL, h_meta);
 
 	h_tree->tree = rb_tree;
 	return h_tree;
@@ -77,6 +87,7 @@ htree_insert(HTree *hist, Datum data)
 {
 	bool		is_new = false;
 	HistNode	new;
+	HistNode   *ret;
 
 	new.node.color = 0;
 	new.node.left = NULL;
@@ -85,7 +96,12 @@ htree_insert(HTree *hist, Datum data)
 	new.data = data;
 	new.count = 1;
 	hist->num_elements += 1;
-	return (HistNode *) rb_insert(hist->tree, (RBNode *) &new, &is_new);
+	ret = (HistNode *) rb_insert(hist->tree, (RBNode *) &new, &is_new);
+	if (is_new)
+	{
+		ret->data = datumTransfer(ret->data, hist->typ_by_val, hist->typ_len);
+	}
+	return ret;
 }
 
 static inline uint64
@@ -231,6 +247,8 @@ median_finalfn(PG_FUNCTION_ARGS)
 	median = htree_median(hist);
 
 	MemoryContextSwitchTo(oldcontext);
+
+	median = datumTransfer(median, hist->typ_by_val, hist->typ_len);
 
 	PG_RETURN_DATUM(median);
 }
