@@ -104,6 +104,25 @@ htree_insert(HTree *hist, Datum data)
 	return ret;
 }
 
+static inline bool
+htree_remove(HTree *hist, Datum data)
+{
+	HistNode	to_find;
+	HistNode   *found;
+
+	to_find.data = data;
+
+	found = (HistNode *) rb_find(hist->tree, (RBNode *) &to_find);
+
+	if (found != NULL && found->count > 0)
+	{
+		found->count -= 1;
+		hist->num_elements -= 1;
+		return true;
+	}
+	return false;
+}
+
 static inline uint64
 htree_num_elements(HTree *hist)
 {
@@ -136,7 +155,6 @@ htree_median(HTree *hist)
 		if (node == NULL)
 			elog(ERROR, "Internal Error, invalid histogram");
 
-		/* TODO copy datum? */
 		median = node->data;
 		seen += node->count;
 	}
@@ -159,9 +177,7 @@ PG_FUNCTION_INFO_V1(median_transfn);
 /*
  * Median state transfer function.
  *
- * This function is called for every value in the set that we are calculating
- * the median for. On first call, the aggregate state, if any, needs to be
- * initialized.
+ * This function adds elements to the sparse histogram.
  *
  * median(state, val) => state
  *
@@ -207,6 +223,37 @@ median_transfn(PG_FUNCTION_ARGS)
 /*********/
 /*********/
 
+PG_FUNCTION_INFO_V1(median_invfn);
+
+/*
+ * Median inverse function.
+ *
+ * This function removes an element from the sparse histogram.
+ *
+ * median(state, val) => state
+ *
+ */
+Datum
+median_invfn(PG_FUNCTION_ARGS)
+{
+	Pointer		state = (PG_ARGISNULL(0) ? NULL : PG_GETARG_POINTER(0));
+	Datum		val_datum = PG_GETARG_DATUM(1);
+
+	if (!AggCheckCallContext(fcinfo, NULL))
+		elog(ERROR, "median_invfn called in non-aggregate context");
+
+	if (state == NULL)
+		elog(ERROR, "median_invfn called before median_transfn");
+
+	htree_remove((HTree *) state, val_datum);
+
+	PG_RETURN_POINTER(state);
+}
+
+/*********/
+/*********/
+/*********/
+
 PG_FUNCTION_INFO_V1(median_finalfn);
 
 /*
@@ -222,15 +269,11 @@ PG_FUNCTION_INFO_V1(median_finalfn);
 Datum
 median_finalfn(PG_FUNCTION_ARGS)
 {
-	MemoryContext agg_context;
-	MemoryContext oldcontext;
 	HTree	   *hist;
 	Datum		median;
 
-	if (!AggCheckCallContext(fcinfo, &agg_context))
+	if (!AggCheckCallContext(fcinfo, NULL))
 		elog(ERROR, "median_finalfn called in non-aggregate context");
-
-	oldcontext = MemoryContextSwitchTo(agg_context);
 
 	if (PG_ARGISNULL(0))
 		PG_RETURN_NULL();
@@ -244,9 +287,6 @@ median_finalfn(PG_FUNCTION_ARGS)
 		PG_RETURN_NULL();
 
 	median = htree_median(hist);
-
-	MemoryContextSwitchTo(oldcontext);
-
 	median = datumTransfer(median, hist->typ_by_val, hist->typ_len);
 
 	PG_RETURN_DATUM(median);

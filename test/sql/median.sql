@@ -75,6 +75,16 @@ SELECT median(magnitude) FROM evenvals;
 -- TODO the following doesn't work, should it?
 -- SELECT median((val, color, magnitude)) FROM evenvals;
 
+--Test windowing, the following two should have the same values in reverse order
+SELECT median(val) OVER (ORDER BY val DESC) FROM evenvals;
+SELECT median(val)
+    OVER (ORDER BY val ROWS between CURRENT ROW AND UNBOUNDED FOLLOWING)
+    FROM evenvals;
+
+SELECT median(val) 
+    OVER (ORDER BY val ROWS between CURRENT ROW AND 2 FOLLOWING)
+    FROM evenvals;
+
 --test all the same value
 CREATE TABLE samevals(val int);
 
