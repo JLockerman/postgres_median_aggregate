@@ -1,3 +1,16 @@
+/*-------------------------------------------------------------------------
+ *
+ * median.c
+ *
+ * Provides median aggregate function and moving-window variant.
+ *
+ * This works by keeping a sparse histogram as a red-black tree of
+ * (datum, count) in transition and inverse and iterating thorough
+ * this until the middle element ins found in median.
+ *
+ *-------------------------------------------------------------------------
+ */
+
 #include <postgres.h>
 #include <fmgr.h>
 #include <lib/rbtree.h>
@@ -45,7 +58,7 @@ hnode_compare(const RBNode *existing, const RBNode *newdata, void *arg)
 	return DatumGetInt32(cmp);
 }
 
-/* combining HNodes sums their counts*/
+/* combining HNodes sums their counts */
 static inline void
 hnode_combine(RBNode *existing, const RBNode *newdata, void *arg)
 {
@@ -82,6 +95,10 @@ htree_create(TypeCacheEntry *tentry)
 	return h_tree;
 }
 
+/*
+ * inserting an element into the histogram increments the
+ * number of elements stored in the histogram and that element's count
+ */
 static inline HistNode *
 htree_insert(HTree *hist, Datum data)
 {
@@ -99,11 +116,19 @@ htree_insert(HTree *hist, Datum data)
 	ret = (HistNode *) rb_insert(hist->tree, (RBNode *) &new, &is_new);
 	if (is_new)
 	{
+		/*
+		 * to ensure the tree elements live long enough, we transfer new
+		 * elements into our context here.
+		 */
 		ret->data = datumTransfer(ret->data, hist->typ_by_val, hist->typ_len);
 	}
 	return ret;
 }
 
+/*
+ * removing an element from the histogram simply decrements that count
+ * and the number of elements in the histogram
+ */
 static inline bool
 htree_remove(HTree *hist, Datum data)
 {
@@ -129,6 +154,12 @@ htree_num_elements(HTree *hist)
 	return hist->num_elements;
 }
 
+/*
+ * to find the median we perform an in-order transversal of the rb-tree
+ * stopping when we reach the middle element
+ * (num_elements / 2 for even num_elements,
+ *  (num_elements / 2) + 1 for odd)
+ */
 static inline Datum
 htree_median(HTree *hist)
 {
@@ -177,9 +208,10 @@ PG_FUNCTION_INFO_V1(median_transfn);
 /*
  * Median state transfer function.
  *
- * This function adds elements to the sparse histogram.
+ * This function adds elements to the sparse histogram,
+ * initializing the histogram on the first call.
  *
- * median(state, val) => state
+ * median(HTree*, val) => HTree*
  *
  */
 Datum
@@ -195,6 +227,11 @@ median_transfn(PG_FUNCTION_ARGS)
 	if (!AggCheckCallContext(fcinfo, &agg_context))
 		elog(ERROR, "median_transfn called in non-aggregate context");
 
+	/*
+	 * The RBTree root is allocated using palloc, so we switch contexts here
+	 * to ensure its lifetime is correct. The other functions do not allocate,
+	 * so they do not switch contexts.
+	 */
 	oldcontext = MemoryContextSwitchTo(agg_context);
 
 	if (!OidIsValid(element_type))
@@ -230,7 +267,7 @@ PG_FUNCTION_INFO_V1(median_invfn);
  *
  * This function removes an element from the sparse histogram.
  *
- * median(state, val) => state
+ * median(HTree*, val) => HTree*
  *
  */
 Datum
@@ -259,11 +296,10 @@ PG_FUNCTION_INFO_V1(median_finalfn);
 /*
  * Median final function.
  *
- * This function is called after all values in the median set has been
- * processed by the state transfer function. It should perform any necessary
- * post processing and clean up any temporary state.
+ * Find the median of the histogram
+ * by iterating through it until the middle element.
  *
- *
+ * median(HTree*, ...) => val
  *
  */
 Datum
